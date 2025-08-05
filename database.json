@@ -1,0 +1,58 @@
+{
+    "providers": [
+        {
+            "name": "2426-CLIEB",
+            "contractStart": "2025-01",
+            "type": "valor",
+            "contract": {
+                "procedures": [
+                    {
+                        "id": "valor_unico",
+                        "name": "laboratorio",
+                        "value": 50000
+                    }
+                ]
+            },
+            "id": "provider_fd8f9099",
+            "execution": {}
+        },
+        {
+            "name": "1234-TESTE 2",
+            "contractStart": "2025-01",
+            "type": "quantidade",
+            "contract": {
+                "procedures": [
+                    {
+                        "id": "proc_1",
+                        "name": "teste ",
+                        "quantity": 50
+                    }
+                ]
+            },
+            "id": "provider_5524c708",
+            "execution": {}
+        }
+    ],
+    "reports": [],
+    "reguladores": [],
+    "etiquetas": {
+        "aih-mac": {
+            "history": [],
+            "current_start": "282510110834"
+        },
+        "aih-faec": {
+            "history": [],
+            "current_start": "282550000201"
+        },
+        "apac-mac": {
+            "history": [],
+            "current_start": "282520119134"
+        },
+        "apac-faec": {
+            "history": [],
+            "current_start": "282560000251"
+        }
+    },
+    "bloqueio_providers": [],
+    "bloqueio_alteracoes": []
+}
