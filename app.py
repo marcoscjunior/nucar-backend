@@ -6,12 +6,20 @@ from flask_cors import CORS
 
 # --- Configuration ---
 app = Flask(__name__)
-CORS(app)  # Allows requests from the HTML file
+CORS(app)
 
-# Define the path for our database file and upload folder
-DATABASE_FILE = 'database.json'
-UPLOAD_FOLDER = 'uploads'
+# --- IMPORTANT: Path configuration for Render Persistent Disks ---
+# Render will mount the disk at the specified path, e.g., /data
+DATA_DIR = '/data'
+DATABASE_FILE = os.path.join(DATA_DIR, 'database.json')
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure the data directory and upload folder exist on the persistent disk
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # --- Helper Functions ---
 
@@ -30,16 +38,21 @@ def get_db_data():
                 "apac-faec": {"history": [], "current_start": "282560000251"}
             },
             "bloqueio_providers": [],
-            "bloqueio_alteracoes": []
+            "bloqueio_alteracoes": [],
+            "users": ["74892016357"], # Default CPF for initial access
+            "waiting_list": [] 
         }
         with open(DATABASE_FILE, 'w', encoding='utf-8') as f:
             json.dump(default_data, f, indent=4)
         return default_data
     try:
         with open(DATABASE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            content = f.read()
+            if not content:
+                # If file is empty, return a default structure to avoid errors
+                return get_db_data()
+            return json.loads(content)
     except (json.JSONDecodeError, FileNotFoundError):
-        # If file is empty, corrupted or not found, return default structure
         return {}
 
 def save_db_data(data):
@@ -51,19 +64,88 @@ def generate_id(prefix):
     """Generates a unique ID with a given prefix."""
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
-# --- Frontend Route ---
-
-@app.route('/')
-def serve_index():
-    """Serves the main index.html file."""
-    return send_from_directory('.', 'index.html')
-
-@app.route('/favicon.ico')
-def favicon():
-    """Serves a blank favicon to avoid 404 errors in the log."""
-    return '', 204
-
 # --- API Routes ---
+
+# Login and User (CPF) Management
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = get_db_data()
+    users = data.get('users', [])
+    cpf_to_check = request.json.get('cpf')
+    if cpf_to_check in users:
+        return jsonify({"success": True, "message": "Login successful"}), 200
+    return jsonify({"success": False, "message": "CPF not authorized"}), 401
+
+@app.route('/api/users', methods=['GET'])
+def get_users():
+    data = get_db_data()
+    return jsonify(data.get('users', []))
+
+@app.route('/api/users', methods=['POST'])
+def add_user():
+    data = get_db_data()
+    users = data.get('users', [])
+    cpf_to_add = request.json.get('cpf')
+    if cpf_to_add and cpf_to_add not in users:
+        users.append(cpf_to_add)
+        data['users'] = users
+        save_db_data(data)
+        return jsonify({"success": True, "cpf": cpf_to_add}), 201
+    return jsonify({"error": "Invalid or duplicate CPF"}), 400
+
+@app.route('/api/users/<cpf>', methods=['DELETE'])
+def delete_user(cpf):
+    data = get_db_data()
+    users = data.get('users', [])
+    if cpf in users:
+        users.remove(cpf)
+        data['users'] = users
+        save_db_data(data)
+        return jsonify({"success": True}), 200
+    return jsonify({"error": "CPF not found"}), 404
+
+# Waiting List Management
+@app.route('/api/waitinglist', methods=['GET'])
+def get_waiting_list():
+    data = get_db_data()
+    return jsonify(data.get('waiting_list', []))
+
+@app.route('/api/waitinglist', methods=['POST'])
+def add_waiting_list_item():
+    data = get_db_data()
+    waiting_list = data.get('waiting_list', [])
+    item = request.json
+    item['id'] = generate_id('wait')
+    waiting_list.append(item)
+    data['waiting_list'] = waiting_list
+    save_db_data(data)
+    return jsonify(item), 201
+
+@app.route('/api/waitinglist/<item_id>', methods=['PUT'])
+def update_waiting_list_item(item_id):
+    data = get_db_data()
+    waiting_list = data.get('waiting_list', [])
+    item_index = next((i for i, item in enumerate(waiting_list) if item['id'] == item_id), None)
+    if item_index is not None:
+        update_data = request.json
+        waiting_list[item_index]['name'] = update_data.get('name', waiting_list[item_index]['name'])
+        waiting_list[item_index]['count'] = update_data.get('count', waiting_list[item_index]['count'])
+        data['waiting_list'] = waiting_list
+        save_db_data(data)
+        return jsonify(waiting_list[item_index]), 200
+    return jsonify({"error": "Item not found"}), 404
+
+@app.route('/api/waitinglist/<item_id>', methods=['DELETE'])
+def delete_waiting_list_item(item_id):
+    data = get_db_data()
+    waiting_list = data.get('waiting_list', [])
+    new_list = [item for item in waiting_list if item['id'] != item_id]
+    if len(new_list) < len(waiting_list):
+        data['waiting_list'] = new_list
+        save_db_data(data)
+        return jsonify({"success": True}), 200
+    return jsonify({"error": "Item not found"}), 404
+
 
 # Provider (Contract) Routes
 @app.route('/api/providers', methods=['GET'])
@@ -75,7 +157,7 @@ def get_providers():
 def add_provider():
     new_provider = request.json
     new_provider['id'] = generate_id('provider')
-    new_provider['execution'] = {} # Initialize execution data
+    new_provider['execution'] = {}
     data = get_db_data()
     providers = data.get('providers', [])
     providers.append(new_provider)
@@ -90,10 +172,9 @@ def update_provider(provider_id):
     providers = data.get('providers', [])
     provider_index = next((i for i, p in enumerate(providers) if p['id'] == provider_id), None)
     if provider_index is not None:
-        # Preserve execution data when updating
         updated_data['execution'] = providers[provider_index].get('execution', {})
         providers[provider_index] = updated_data
-        providers[provider_index]['id'] = provider_id # Ensure ID is not overwritten
+        providers[provider_index]['id'] = provider_id
         data['providers'] = providers
         save_db_data(data)
         return jsonify({"success": True}), 200
@@ -119,8 +200,7 @@ def update_execution(provider_id):
     data = get_db_data()
     provider = next((p for p in data.get('providers', []) if p['id'] == provider_id), None)
     if provider:
-        if 'execution' not in provider:
-            provider['execution'] = {}
+        if 'execution' not in provider: provider['execution'] = {}
         provider['execution'][month_key] = execution_data
         save_db_data(data)
         return jsonify({"success": True}), 200
@@ -144,11 +224,9 @@ def get_reports():
 
 @app.route('/api/reports', methods=['POST'])
 def add_report():
-    if 'report_pdf' not in request.files:
-        return jsonify({"error": "No file part"}), 400
+    if 'report_pdf' not in request.files: return jsonify({"error": "No file part"}), 400
     file = request.files['report_pdf']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+    if file.filename == '': return jsonify({"error": "No selected file"}), 400
     if file:
         filename = f"{generate_id('report')}_{file.filename}"
         if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -179,12 +257,10 @@ def delete_report(report_id):
     reports = data.get('reports', [])
     report_to_delete = next((r for r in reports if r['id'] == report_id), None)
     if report_to_delete:
-        # Delete file from disk
         try:
             os.remove(os.path.join(app.config['UPLOAD_FOLDER'], report_to_delete['filename']))
         except OSError as e:
             print(f"Error deleting file {report_to_delete['filename']}: {e}")
-        # Remove from DB
         new_reports = [r for r in reports if r['id'] != report_id]
         data['reports'] = new_reports
         save_db_data(data)
@@ -287,5 +363,6 @@ def handle_bloqueio_alteracoes():
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    # Host '0.0.0.0' makes the server accessible on your local network
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # The port is dynamically assigned by Render, so we don't need to specify it.
+    # Host '0.0.0.0' is required to be accessible within the Render network.
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
