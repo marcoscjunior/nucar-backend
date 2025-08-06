@@ -1,38 +1,5 @@
 {
-    "providers": [
-        {
-            "name": "2426-CLIEB",
-            "contractStart": "2025-01",
-            "type": "valor",
-            "contract": {
-                "procedures": [
-                    {
-                        "id": "valor_unico",
-                        "name": "laboratorio",
-                        "value": 50000
-                    }
-                ]
-            },
-            "id": "provider_fd8f9099",
-            "execution": {}
-        },
-        {
-            "name": "1234-TESTE 2",
-            "contractStart": "2025-01",
-            "type": "quantidade",
-            "contract": {
-                "procedures": [
-                    {
-                        "id": "proc_1",
-                        "name": "teste ",
-                        "quantity": 50
-                    }
-                ]
-            },
-            "id": "provider_5524c708",
-            "execution": {}
-        }
-    ],
+    "providers": [],
     "reports": [],
     "reguladores": [],
     "etiquetas": {
@@ -54,5 +21,9 @@
         }
     },
     "bloqueio_providers": [],
-    "bloqueio_alteracoes": []
+    "bloqueio_alteracoes": [],
+    "users": [
+        "74892016357"
+    ],
+    "waiting_list": []
 }
