@@ -14,6 +14,7 @@ CORS(app)
 # The connection string is stored securely as an environment variable in Render.
 MONGO_URI = os.environ.get('MONGO_URI')
 if not MONGO_URI:
+    # This will cause the deploy to fail if the variable is not set, which is good.
     raise RuntimeError("MONGO_URI environment variable not set.")
 
 client = MongoClient(MONGO_URI)
