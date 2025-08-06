@@ -44,72 +44,6 @@ def serve_index():
 
 # --- API Routes ---
 
-# Login and User (CPF) Management
-@app.route('/api/login', methods=['POST'])
-def login():
-    cpf_to_check = request.json.get('cpf')
-    user = db.users.find_one({"cpf": cpf_to_check})
-    if user:
-        return jsonify({"success": True, "message": "Login successful"}), 200
-    # Check for the default user if the collection is empty
-    if db.users.count_documents({}) == 0 and cpf_to_check == "74892016357":
-        db.users.insert_one({"cpf": "74892016357"})
-        return jsonify({"success": True, "message": "Default user login"}), 200
-    return jsonify({"success": False, "message": "CPF not authorized"}), 401
-
-@app.route('/api/users', methods=['GET'])
-def get_users():
-    users_cursor = db.users.find({}, {"_id": 0, "cpf": 1})
-    users_list = [user['cpf'] for user in users_cursor]
-    return jsonify(users_list)
-
-@app.route('/api/users', methods=['POST'])
-def add_user():
-    cpf_to_add = request.json.get('cpf')
-    if cpf_to_add and not db.users.find_one({"cpf": cpf_to_add}):
-        db.users.insert_one({"cpf": cpf_to_add})
-        return jsonify({"success": True, "cpf": cpf_to_add}), 201
-    return jsonify({"error": "Invalid or duplicate CPF"}), 400
-
-@app.route('/api/users/<cpf>', methods=['DELETE'])
-def delete_user(cpf):
-    result = db.users.delete_one({"cpf": cpf})
-    if result.deleted_count > 0:
-        return jsonify({"success": True}), 200
-    return jsonify({"error": "CPF not found"}), 404
-
-# Waiting List Management
-@app.route('/api/waitinglist', methods=['GET'])
-def get_waiting_list():
-    items = list(db.waiting_list.find())
-    return jsonify(mongo_to_json(items))
-
-@app.route('/api/waitinglist', methods=['POST'])
-def add_waiting_list_item():
-    item = request.json
-    result = db.waiting_list.insert_one(item)
-    item['id'] = str(result.inserted_id)
-    return jsonify(mongo_to_json(item)), 201
-
-@app.route('/api/waitinglist/<item_id>', methods=['PUT'])
-def update_waiting_list_item(item_id):
-    update_data = request.json
-    result = db.waiting_list.update_one(
-        {'_id': ObjectId(item_id)},
-        {'$set': {'name': update_data.get('name'), 'count': update_data.get('count')}}
-    )
-    if result.matched_count > 0:
-        updated_item = db.waiting_list.find_one({'_id': ObjectId(item_id)})
-        return jsonify(mongo_to_json(updated_item)), 200
-    return jsonify({"error": "Item not found"}), 404
-
-@app.route('/api/waitinglist/<item_id>', methods=['DELETE'])
-def delete_waiting_list_item(item_id):
-    result = db.waiting_list.delete_one({'_id': ObjectId(item_id)})
-    if result.deleted_count > 0:
-        return jsonify({"success": True}), 200
-    return jsonify({"error": "Item not found"}), 404
-
 # Provider (Contract) Routes
 @app.route('/api/providers', methods=['GET'])
 def get_providers():
@@ -180,7 +114,7 @@ def add_report():
     file = request.files['report_pdf']
     if file.filename == '': return jsonify({"error": "No selected file"}), 400
     if file:
-        filename = f"{generate_id('report')}_{file.filename}"
+        filename = f"{uuid.uuid4().hex}_{file.filename}"
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         new_report = { "name": request.form['name'], "description": request.form['description'], "filename": filename }
         db.reports.insert_one(new_report)
@@ -203,7 +137,7 @@ def delete_report(report_id):
         return jsonify({"success": True}), 200
     return jsonify({"error": "Report not found"}), 404
 
-# Reguladores, Etiquetas, Bloqueio Routes (converted to MongoDB)
+# Reguladores, Etiquetas, Bloqueio Routes
 @app.route('/api/reguladores', methods=['GET', 'POST'])
 def handle_reguladores():
     if request.method == 'GET':
